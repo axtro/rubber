@@ -212,7 +212,7 @@ namespace :rubber do
     end
 
     puts "Resetting incremental backups"
-    `/usr/local/ec2onrails/bin/backup_app_db --reset`
+    `/usr/local/ec2onrails/bin/backup_app_db.rb --reset`
   end
 
 
