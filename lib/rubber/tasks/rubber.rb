@@ -167,6 +167,7 @@ namespace :rubber do
     This tries to find the last backup made or the s3 object identified by the
     key FILENAME
     The following arguments affect behavior:
+    BUCKET (optional):     overwrite the bucket defined in rubber.yml
     FILENAME (optional):   key of S3 object to use
     DBUSER (required)      User to connect to the db as
     DBPASS (optional):     Pass to connect to the db with
@@ -174,6 +175,7 @@ namespace :rubber do
     DBNAME (required):     Database name to backup
   DESC
   task :restore_db_s3 do
+    bucket = get_env('BUCKET')
     file = get_env('FILENAME')
     user = get_env('DBUSER', true)
     pass = get_env('DBPASS')
@@ -186,12 +188,12 @@ namespace :rubber do
     db_restore_cmd = eval('%Q{' + db_restore_cmd + '}')
 
     # try to fetch a matching file from s3 (if backup_bucket given)
-    backup_bucket = cloud_provider.backup_bucket
+    backup_bucket = bucket || cloud_provider.backup_bucket
     raise "No backup_bucket defined in rubber.yml" unless backup_bucket
     if (init_s3 &&
         AWS::S3::Bucket.list.find { |b| b.name == backup_bucket })
       s3objects = AWS::S3::Bucket.find(backup_bucket,
-                 :prefix => 'db/') 
+                 :prefix => (file || 'db/')) 
       if file
         puts "trying to fetch #{file} from s3"
         data = s3objects.detect { |o| file == o.key }
@@ -209,6 +211,8 @@ namespace :rubber do
       end
     end
 
+    puts "Resetting incremental backups"
+    `/usr/local/ec2onrails/bin/backup_app_db --reset`
   end
 
 
