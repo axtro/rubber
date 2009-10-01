@@ -113,7 +113,7 @@ namespace :rubber do
               cat /etc/fstab.bak | grep -v '#{vol_spec['mount']}' > /etc/fstab
               echo '#{vol_spec['device']} #{vol_spec['mount']} #{vol_spec['filesystem']} noatime 0 0 # rubber volume #{vol_id}' >> /etc/fstab
 
-              #{('yes | mkfs -t ' + vol_spec['filesystem'] + ' ' + vol_spec['device']) if created}
+              #{('yes | mkfs -t ' + vol_spec['filesystem'] + ' ' + vol_spec['device']) if created and !vol_spec['base']}
               mkdir -p '#{vol_spec['mount']}'
               mount '#{vol_spec['mount']}'
             fi
