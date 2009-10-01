@@ -165,8 +165,8 @@ module Rubber
         return response.return == "true"
       end
 
-      def create_volume(size, zone)
-        response = @ec2.create_volume(:size => size.to_s, :availability_zone => zone)
+      def create_volume(size, zone, snapshot_id = nil)
+        response = @ec2.create_volume(:size => size.to_s, :availability_zone => zone, :snapshot_id => snapshot_id)
         return response.volumeId
       end
 
