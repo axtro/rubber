@@ -113,7 +113,7 @@ module Rubber
           FileUtils.mkdir_p(File.dirname(config_path)) if config_path
 
           # Write a backup of original
-          open("#{config_path}.bak", 'w') { |f| f.write(orig) } if config_path
+          open("#{config_path}.bak", 'w') { |f| f.write(orig) } if config_path and !config.no_backup
 
           # Write out transformed file
           writer = config_path || "|#{config.write_cmd}"
@@ -174,6 +174,8 @@ module Rubber
       attr_accessor :additive
       # Lets one dynamically determine if a given file gets skipped during transformation
       attr_accessor :skip
+      # Lets one dynamically skip the creation of a backup
+      attr_accessor :no_backup
       # use sudo to write the output file
       # attr_accessor :sudo
       # options passed in through code
