@@ -96,11 +96,9 @@ namespace :rubber do
         print "."
         sleep 2
         volume = cloud.describe_volumes(vol_id).first
-        break if volume[:status] == "in-use"
+        break if volume[:status] == "in-use" and volume[:attachment_status] == "attached"
       end
-      print "\n"
-      print "Waiting an extra 20s just to make sure... :)"
-      sleep 20
+      sleep 2
       print "\n"
 
       # we don't mount/format at this time if we are doing a RAID array
