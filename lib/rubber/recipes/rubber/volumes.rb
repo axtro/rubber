@@ -99,6 +99,9 @@ namespace :rubber do
         break if volume[:status] == "in-use"
       end
       print "\n"
+      print "Waiting an extra 15s just to make sure... :)"
+      sleep 15
+      print "\n"
 
       # we don't mount/format at this time if we are doing a RAID array
       if vol_spec['mount'] && vol_spec['filesystem']
