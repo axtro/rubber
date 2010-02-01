@@ -282,10 +282,10 @@ namespace :rubber do
     value = Capistrano::CLI.ui.ask("About to DESTROY #{instance_alias} (#{instance_item.instance_id}) in mode #{RUBBER_ENV}.  Are you SURE [yes/NO]?: ")
     fatal("Exiting", 0) if value != "yes"
 
-    if instance_item.static_ip
-      value = Capistrano::CLI.ui.ask("Instance has a static ip, do you want to release it? [y/N]?: ")
-      destroy_static_ip(instance_item.static_ip) if value =~ /^y/
-    end
+#    if instance_item.static_ip
+#      value = Capistrano::CLI.ui.ask("Instance has a static ip, do you want to release it? [y/N]?: ")
+#      destroy_static_ip(instance_item.static_ip) if value =~ /^y/
+#    end
 
     if instance_item.volumes
       value = Capistrano::CLI.ui.ask("Instance has persistent volumes, do you want to destroy them? [y/N]?: ")
