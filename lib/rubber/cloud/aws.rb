@@ -165,7 +165,12 @@ module Rubber
         return response.return == "true"
       end
 
-      def create_volume(size, zone, snapshot_id = nil)
+      def create_volume(size, zone, base_volume_id = nil)
+        snapshot_id = nil
+        if base_volume_id
+          base_snapshots = @ec2.describe_snapshots.select{|s|s[:aws_volume_id] == base_volume_id}
+          snapshot_id = base_snapshots.sort {|a, b| b[:aws_started_at] <=> a[:aws_started_at]}
+        end
         response = @ec2.create_volume(:size => size.to_s, :availability_zone => zone, :snapshot_id => snapshot_id)
         return response.volumeId
       end
