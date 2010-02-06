@@ -32,28 +32,10 @@ timezone: US/Eastern
 #
 domain: foo.com
 
-# OPTIONAL: The configuration for each dns provider (nettica|zerigo|dyndns)
-#          This lets rubber updatea dynamic dns service with the instance alias and ip
-#
-dns_providers:
-  nettica:
-    user: joe
-    password: sekret
-    record_type: A
-    ttl: 300
-  zerigo:
-    customer_id: 1234
-    email: foo@bar.com
-    token: hexxy
-    record_type: A
-    ttl: 300
-  dyndns:
-    user: joe
-    password: sekret
-    update_url: https://members.dyndns.org/nic/update?hostname=%host%&myip=%ip%'
-
-# OPTIONAL: The dns provider to use
-# dns_provider: nettica
+# OPTIONAL: See rubber-dns.yml for dns configuration
+# This lets rubber update a dynamic dns service with the instance alias
+# and ip when they are created.  It also allows setting up arbitrary
+# dns records (CNAME, MX, Round Robin DNS, etc)
 
 # OPTIONAL: Additional rubber file to pull config from if it exists.  This file will
 # also be pushed to remote host at RUBBER_ROOT/config/rubber/rubber-secret.yml
@@ -86,19 +68,32 @@ cloud_providers:
     #
     # pk_file: "#{Dir[(File.expand_path('~') rescue '/root') + '/.ec2/pk-*'].first}"
     # cert_file: "#{Dir[(File.expand_path('~') rescue '/root') + '/.ec2/cert-*'].first}"
-    # image_bucket: "#{app_name}_images"
+    # image_bucket: "#{app_name}-images"
 
     # OPTIONAL: Needed for backing up database to s3
-    # backup_bucket: "#{app_name}_backups"
+    # backup_bucket: "#{app_name}-backups"
 
     # REQUIRED: the ami and instance type for creating instances
     # The Ubuntu images at http://alestic.com/ work well
-    # Ubuntu 9.04 Jaunty	base install	32-bit	2.6.21.7-2.fc8xen	ami-ed46a784
-    # Ubuntu 9.04 Jaunty	base install	64-bit	2.6.21.7-2.fc8xen	ami-5b46a732
+    # Ubuntu 9.04 Jaunty	base install	32-bit	2.6.21.7-2.fc8xen	ami-ccf615a5
+    # Ubuntu 9.04 Jaunty	base install	64-bit	2.6.21.7-2.fc8xen	ami-eef61587
     #
-    image_id: ami-ed46a784
+    image_id: ami-ccf615a5
     # m1.small or m1.large or m1.xlarge
     image_type: m1.small
+
+    # OPTIONAL: EC2 spot instance request support.
+    #
+    # Enables the creation of spot instance requests.  Rubber will wait synchronously until the request is fulfilled,
+    # at which point it will begin initializing the instance, unless spot_instance_request_timeout is set.
+    # spot_instance: true
+    #
+    # The maximum price you would like to pay for your spot instance.
+    # spot_price: "0.085"
+    #
+    # If a spot instance request can't be fulfilled in 3 minutes, fallback to on-demand instance creation.  If not set,
+    # the default is infinite.
+    # spot_instance_request_timeout: 180
 
 # REQUIRED the cloud provider to use
 #
@@ -138,18 +133,22 @@ isolate_security_groups: true
 # OPTIONAL: Set if you want to use Ruby Enterprise Edition instead of the standard ubuntu one
 use_enterprise_ruby: false
 
+# REE installs into /usr/local, so this lets us setup environment to use it globally
+# instead of system ruby
+ruby_prefix: "#{use_enterprise_ruby ? '/usr/local' : '/usr'}"
+
 # OPTIONAL: The packages to install on all instances
 # You can install a specific version of a package by using a sub-array of pkg, version
 # For example, packages: [[rake, 0.7.1], irb]
-packages: [postfix, build-essential, ruby-full, ruby1.8-dev, rake, irb]
+packages: [postfix, build-essential, ruby-full, ruby1.8-dev, rake, irb, git-core]
 
 # OPTIONAL: gem sources to setup for rubygems
-gemsources: ["http://gems.rubyforge.org/", "http://gems.github.com"]
+gemsources: ["http://gemcutter.org", "http://gems.rubyforge.org/", "http://gems.github.com"]
 
 # OPTIONAL: The gems to install on all instances
 # You can install a specific version of a gem by using a sub-array of gem, version
 # For example, gem: [[rails, 2.2.2], open4, aws-s3]
-gems: [wr0ngway-rubber, rails, open4, aws-s3]
+gems: [rubber, rails, open4, aws-s3]
 
 # OPTIONAL: A string prepended to shell command strings that cause multi
 # statement shell commands to fail fast.  You may need to comment this out

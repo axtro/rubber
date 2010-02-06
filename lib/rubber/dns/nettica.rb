@@ -5,15 +5,8 @@ module Rubber
     class Nettica < Base
 
       def initialize(env)
-        super(env)
-        @nettica_env = @env.dns_providers.nettica
-        @client = ::Nettica::Client.new(@nettica_env.user, @nettica_env.password)
-        @ttl = (@nettica_env.ttl || 300).to_i
-        @record_type = @nettica_env.record_type || "A"
-      end
-
-      def nameserver
-        "dns1.nettica.com"
+        super(env, "nettica")
+        @client = ::Nettica::Client.new(provider_env.user, provider_env.password)
       end
 
       def check_status(response)
@@ -33,40 +26,91 @@ module Rubber
         return response
       end
 
-      def host_exists?(host)
-        domain_info = check_status @client.list_domain(env.domain)
-        raise "Domain needs to exist in nettica before records can be updated" unless domain_info.record
-        return domain_info.record.any? { |r| r.hostName == host }
+      def find_host_records(opts = {})
+        opts = setup_opts(opts, [:host, :domain])
+
+        result = []
+        hn = opts[:host]
+        ht = opts[:type]
+        hd = opts[:data]
+
+        domain_info = find_or_create_zone(opts[:domain])
+
+        domain_info.record.each do |h|
+          keep = true
+          if hn && h.hostName != hn && hn != '*'
+            keep = false
+          end
+          if ht && h.recordType != ht && ht != '*'
+            keep = false
+          end
+          if hd && h.data != hd
+            keep = false
+          end
+          result << record_to_opts(h) if keep
+        end
+
+        return result
       end
 
-      def create_host_record(host, ip)
-        new = @client.create_domain_record(env.domain, host, @record_type, ip, @ttl, 0)
-        check_status @client.add_record(new)
+      def create_host_record(opts = {})
+        opts = setup_opts(opts, [:host, :data, :domain, :type, :ttl])
+        find_or_create_zone(opts[:domain])
+        record = opts_to_record(opts)
+        check_status @client.add_record(record)
       end
 
-      def destroy_host_record(host)
-        old_record = check_status(@client.list_domain(env.domain)).record.find {|r| r.hostName == host }
-        old = @client.create_domain_record(env.domain, host, old_record.recordType, old_record.data, old_record.tTL, old_record.priority)
-        check_status @client.delete_record(old)
+      def destroy_host_record(opts = {})
+        find_host_records(opts).each do |h|
+          record = opts_to_record(h)
+          check_status @client.delete_record(record)
+        end
       end
 
-      def update_host_record(host, ip)
-        old_record = check_status(@client.list_domain(env.domain)).record.find {|r| r.hostName == host }
-        update_record(host, ip, old_record)
+      def update_host_record(old_opts = {}, new_opts = {})
+        old_opts = setup_opts(old_opts, [:host, :domain])
+        new_opts = setup_opts(new_opts.merge(:no_defaults =>true), [])
+        find_host_records(old_opts).each do |h|
+          old_record = opts_to_record(h)
+          new_record = opts_to_record(h.merge(new_opts))
+          check_status @client.update_record(old_record, new_record)
+        end
       end
 
-      # update the top level domain record which has an empty hostName
-      def update_domain_record(ip)
-        old_record = check_status(@client.list_domain(env.domain)).record.find {|r| r.hostName == '' and r.recordType == 'A' and r.data =~ /\A\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/}
-        update_record('', ip, old_record)
+      private
+
+      def find_or_create_zone(domain)
+        domain_info = @client.list_domain(domain)
+        if domain_info.record
+          check_status domain_info
+        else
+          check_status @client.create_zone(domain)
+          domain_info = check_status @client.list_domain(domain)
+          raise "Could not create zone in nettica: #{domain}" unless domain_info.record
+        end
+        return domain_info
       end
 
-      def update_record(host, ip, old_record)
-        old = @client.create_domain_record(env.domain, host, old_record.recordType, old_record.data, old_record.tTL, old_record.priority)
-        new = @client.create_domain_record(env.domain, host, @record_type, ip, @ttl, 0)
-        check_status @client.update_record(old, new)
+      def opts_to_record(opts)
+        record = @client.create_domain_record(opts[:domain],
+                                              opts[:host],
+                                              opts[:type],
+                                              opts[:data],
+                                              opts[:ttl],
+                                              opts[:priority] || 0)
+        return record
       end
 
+      def record_to_opts(record)
+        opts = {}
+        opts[:host] = record.hostName || ''
+        opts[:domain] = record.domainName
+        opts[:type] = record.recordType
+        opts[:data] = record.data if record.data
+        opts[:ttl] = record.tTL if record.tTL
+        opts[:priority] = record.priority if record.priority
+        return opts
+      end
     end
 
   end

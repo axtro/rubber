@@ -32,6 +32,8 @@ module Rubber
         roles_dir = File.join(@config_root, "role")
         roles = Dir.entries(roles_dir)
         roles.delete_if {|d| d =~ /(^\..*)/}
+        roles += @items['roles'].keys
+        return roles.compact.uniq
       end
 
       def current_host
@@ -41,7 +43,7 @@ module Rubber
       def current_full_host
         Socket::gethostname
       end
-
+      
       def bind(roles = nil, host = nil)
         BoundEnv.new(@items, roles, host)
       end
@@ -75,6 +77,10 @@ module Rubber
           @global = global
           super()
           replace(receiver)
+        end
+
+        def rubber_instances
+          @rubber_instances ||= Rubber::Configuration::rubber_instances
         end
 
         def [](name)
@@ -122,14 +128,16 @@ module Rubber
       class BoundEnv < HashValueProxy
         attr_reader :roles
         attr_reader :host
-        attr_reader :full_host
 
         def initialize(global, roles, host)
           @roles = roles
           @host = host
           bound_global = bind_config(global)
           super(nil, bound_global)
-          @full_host = "#{host}.#{domain}" rescue nil
+        end
+
+        def full_host
+          @full_host ||= "#{host}.#{domain}" rescue nil
         end
 
         # Forces role/host overrides into config
