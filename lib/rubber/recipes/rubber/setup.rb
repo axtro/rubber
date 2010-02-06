@@ -1,5 +1,8 @@
 namespace :rubber do
 
+  # Disable connecting to any Windows instance.
+  set :default_run_options, :except => { :platform => 'windows' }
+
   desc <<-DESC
     Bootstraps instances by setting timezone, installing packages and gems
   DESC
@@ -58,6 +61,83 @@ namespace :rubber do
   required_task :setup_dns_aliases do
     rubber_instances.each do |ic|
       update_dyndns(ic)
+    end
+  end
+
+  desc <<-DESC
+    Sets up the additional dns records supplied in the dns_records config in rubber.yml
+  DESC
+  required_task :setup_dns_records do
+    records = rubber_env.dns_records
+    if records && rubber_env.dns_provider
+      provider = Rubber::Dns::get_provider(rubber_env.dns_provider, rubber_env)
+
+      # collect the round robin records (those with the same host/domain/type)
+      rr_records = []
+      records.each_with_index do |record, i|
+        m = records.find_all {|r| record['host'] == r['host'] && record['domain'] == r['domain'] && record['type'] == r['type']}
+        m = m.sort {|a,b| a.object_id <=> b.object_id}
+        rr_records << m if m.size > 1 && ! rr_records.include?(m)
+      end
+
+      # simple records are those that aren't round robin ones
+      simple_records = records - rr_records.flatten
+      
+      # for each simple record, create or update as necessary
+      simple_records.each do |record|
+        matching = provider.find_host_records(:host => record['host'], :domain =>record['domain'], :type => record['type'])
+        if matching.size > 1
+          msg =  "Multiple records in dns provider, but not in rubber.yml\n"
+          msg << "Round robin records need to be in both, or neither.\n"
+          msg << "Please fix manually:\n"
+          msg << matching.pretty_inspect
+          fatal(msg)
+        end
+
+        record = provider.setup_opts(record)
+        if matching.size == 1
+          match = matching.first
+          if  provider.host_records_equal?(record, match)
+            logger.info "Simple dns record already up to date: #{record[:host]}.#{record[:domain]}:#{record[:type]} => #{record[:data]}"
+          else
+            logger.info "Updating simple dns record: #{record[:host]}.#{record[:domain]}:#{record[:type]} => #{record[:data]}"
+            provider.update_host_record(match, record)
+          end
+        else
+          logger.info "Creating simple dns record: #{record[:host]}.#{record[:domain]}:#{record[:type]} => #{record[:data]}"
+          provider.create_host_record(record)
+        end
+      end
+
+      # group round robin records
+      rr_records.each do |rr_group|
+        host = rr_group.first['host']
+        domain = rr_group.first['domain']
+        type = rr_group.first['type']
+        matching = provider.find_host_records(:host => host, :domain => domain, :type => type)
+
+        # remove from consideration the local records that are the same as remote ones
+        matching.clone.each do |r|
+          rr_group.delete_if {|rg| provider.host_records_equal?(r, rg) }
+          matching.delete_if {|rg| provider.host_records_equal?(r, rg) }
+        end
+        if rr_group.size == 0 && matching.size == 0
+          logger.info "Round robin dns records already up to date: #{host}.#{domain}:#{type}"
+        end
+
+        # create the local records that don't exist remotely
+        rr_group.each do |r|
+          r = provider.setup_opts(r)
+          logger.info "Creating round robin dns record: #{r[:host]}.#{r[:domain]}:#{r[:type]} => #{r[:data]}"
+          provider.create_host_record(r)
+        end
+        
+        # remove the remote records that don't exist locally
+        matching.each do |r|
+          logger.info "Removing round robin dns record: #{r[:host]}.#{r[:domain]}:#{r[:type]} => #{r[:data]}"
+          provider.destroy_host_record(r)
+        end
+      end
     end
   end
 
@@ -144,9 +224,31 @@ namespace :rubber do
   desc <<-DESC
     Install ruby gems defined in the rails environment.rb
   DESC
-  after "deploy:symlink", "rubber:install_rails_gems" if Rubber::Util.is_rails?
+  after "rubber:config", "rubber:install_rails_gems" if Rubber::Util.is_rails?
   task :install_rails_gems do
     sudo "sh -c 'cd #{current_path} && RAILS_ENV=#{RUBBER_ENV} rake gems:install'"
+  end
+
+  desc <<-DESC
+    Convenience task for installing your defined set of ruby gems locally.
+  DESC
+  required_task :install_local_gems do
+    fatal("install_local_gems can only be run in development") if RUBBER_ENV != 'development'
+    env = rubber_cfg.environment.bind(rubber_cfg.environment.known_roles)
+    gems = env['gems']
+    expanded_gem_list = []
+    gems.each do |gem_spec|
+      if gem_spec.is_a?(Array)
+        expanded_gem_list << "#{gem_spec[0]}:#{gem_spec[1]}"
+      else
+        expanded_gem_list << gem_spec
+      end
+    end
+    expanded_gem_list = expanded_gem_list.join(' ')
+
+    logger.info "Installing gems:#{expanded_gem_list}"
+    open("/tmp/gem_helper", "w") {|f| f.write(gem_helper_script)}
+    system "sh /tmp/gem_helper install #{expanded_gem_list}"
   end
 
   desc <<-DESC
@@ -280,10 +382,60 @@ namespace :rubber do
     end
   end
 
+  # Rubygems always installs even if the gem is already installed
+  # When providing versions, rubygems fails unless versions are provided for all gems
+  # This helper script works around these issues by installing gems only if they
+  # aren't already installed, and separates versioned/unversioned into two separate
+  # calls to rubygems
+  #
+  set :gem_helper_script, <<-'ENDSCRIPT'
+    ruby - $@ <<-'EOF'
+
+    gem_cmd = ARGV[0]
+    gems = ARGV[1..-1]
+    cmd = "gem #{gem_cmd} --no-rdoc --no-ri"
+
+    to_install = {}
+    to_install_ver = {}
+    # gem list passed in, possibly with versions, as "gem1 gem2:1.2 gem3"
+    gems.each do |gem_spec|
+      parts = gem_spec.split(':')
+      if parts[1]
+        to_install_ver[parts[0]] = parts[1]
+      else
+        to_install[parts[0]] = true
+      end
+    end
+
+    installed = {}
+    `gem list --local`.each do |line|
+        parts = line.scan(/(.*) \((.*)\)/).first
+        next unless parts && parts.size == 2
+        installed[parts[0]] = parts[1].split(",")
+    end
+
+    to_install.delete_if {|g, v| installed.has_key?(g) } if gem_cmd == 'install'
+    to_install_ver.delete_if {|g, v| installed.has_key?(g) && installed[g].include?(v) }
+
+    # rubygems can only do asingle versioned gem at a time so we need
+    # to do the two groups separately
+    # install versioned ones first so unversioned don't pull in a newer version
+    to_install_ver.each do |g, v|
+      system "#{cmd} #{g} -v #{v}"
+      fail "Unable to install versioned gem #{g}:#{v}" if $?.exitstatus > 0
+    end
+    if to_install.size > 0
+      gem_list = to_install.keys.join(' ')
+      system "#{cmd} #{gem_list}"
+      fail "Unable to install gems" if $?.exitstatus > 0
+    end
+
+    'EOF'
+  ENDSCRIPT
+
   # Helper for installing gems,allows one to respond to prompts
   def gem_helper(update=false)
     cmd = update ? "update" : "install"
-
 
     opts = get_host_options('gems') do |gem_list|
       expanded_gem_list = []
@@ -298,56 +450,7 @@ namespace :rubber do
     end
     
     if opts.size > 0
-      # Rubygems always installs even if the gem is already installed
-      # When providing versions, rubygems fails unless versions are provided for all gems
-      # This helper script works around these issues by installing gems only if they
-      # aren't already installed, and separates versioned/unversioned into two separate
-      # calls to rubygems
-      script = prepare_script 'gem_helper', <<-'ENDSCRIPT'
-        ruby - $@ <<-'EOF'
-
-        gem_cmd = ARGV[0]
-        gems = ARGV[1..-1]
-        cmd = "gem #{gem_cmd} --no-rdoc --no-ri"
-
-        to_install = {}
-        to_install_ver = {}
-        # gem list passed in, possibly with versions, as "gem1 gem2:1.2 gem3"
-        gems.each do |gem_spec|
-          parts = gem_spec.split(':')
-          if parts[1]
-            to_install_ver[parts[0]] = parts[1]
-          else
-            to_install[parts[0]] = true
-          end
-        end
-
-        installed = {}
-        `gem list --local`.each do |line|
-            parts = line.scan(/(.*) \((.*)\)/).first
-            next unless parts && parts.size == 2
-            installed[parts[0]] = parts[1].split(",")
-        end
-
-        to_install.delete_if {|g, v| installed.has_key?(g) } if gem_cmd == 'install'
-        to_install_ver.delete_if {|g, v| installed.has_key?(g) && installed[g].include?(v) } 
-
-        # rubygems can only do asingle versioned gem at a time so we need
-        # to do the two groups separately
-        # install versioned ones first so unversioned don't pull in a newer version
-        to_install_ver.each do |g, v|
-          system "#{cmd} #{g} -v #{v}"
-          fail "Unable to install versioned gem #{g}:#{v}" if $?.exitstatus > 0
-        end
-        if to_install.size > 0
-          gem_list = to_install.keys.join(' ')
-          system "#{cmd} #{gem_list}"
-          fail "Unable to install gems" if $?.exitstatus > 0
-        end
-
-        'EOF'
-      ENDSCRIPT
-
+      script = prepare_script('gem_helper', gem_helper_script)
       sudo "sh #{script} #{cmd} $CAPISTRANO:VAR$", opts do |ch, str, data|
         handle_gem_prompt(ch, data, str)
       end

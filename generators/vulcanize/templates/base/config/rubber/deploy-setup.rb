@@ -13,33 +13,26 @@ namespace :rubber do
       rubber_instances.filtered.each do |ic|
         env = rubber_cfg.environment.bind(ic.role_names, ic.name)
         if env.use_enterprise_ruby
-          ent_ruby_hosts << ic.full_name
+          ent_ruby_hosts << ic.full_name unless ic.windows?
         end
       end
 
       if ent_ruby_hosts.size > 0
-
         task :_install_enterprise_ruby, :hosts => ent_ruby_hosts do
-
-          # preferences to pick up specific Ruby packages from brightbox
-          prefs = <<-DATA
-            Package: *
-            Pin: release l=brightbox
-            Pin-Priority: 1001
-
-            Package: ruby1.8-elisp
-            Pin: release l=Ubuntu
-            Pin-Priority: 1001
-          DATA
-
-          prefs.gsub!(/^ */, '') # remove leading whitespace
-          put(prefs, '/etc/apt/preferences')
-
-          rubber.sudo_script 'install_enterprise_ruby', <<-ENDSCRIPT
-            wget http://apt.brightbox.net/release.asc -O - | apt-key add -
-            echo "deb http://apt.brightbox.net/ hardy rubyee" > /etc/apt/sources.list.d/brightbox-rubyee.list
+          ver = "1.8.7-2010.01"
+          rubber.run_script "install_ruby-enterprise", <<-ENDSCRIPT
+            if [[ ! `ruby --version 2> /dev/null` =~ "Ruby Enterprise Edition 2010.01" ]]; then
+              arch=`uname -m`
+              if [ "$arch" = "x86_64" ]; then
+                src="http://rubyforge.org/frs/download.php/68720/ruby-enterprise_#{ver}_amd64.deb"
+              else
+                src="http://rubyforge.org/frs/download.php/68718/ruby-enterprise_#{ver}_i386.deb"
+              fi
+              src_file="${src##*/}"
+              wget -qP /tmp ${src}
+              dpkg -i /tmp/${src_file}
+            fi
           ENDSCRIPT
-
         end
 
         _install_enterprise_ruby
@@ -64,26 +57,13 @@ namespace :rubber do
       ENDSCRIPT
     end
     
-    # git in ubuntu 7.0.4 is very out of date and doesn't work well with capistrano
-    after "rubber:install_packages", "rubber:base:install_git" if scm == "git"
-    task :install_git do
-      rubber.run_script 'install_git', <<-ENDSCRIPT
-        if ! git --version &> /dev/null; then
-          arch=`uname -m`
-          if [ "$arch" = "x86_64" ]; then
-            src="http://mirrors.kernel.org/ubuntu/pool/main/g/git-core/git-core_1.5.4.5-1~dapper1_amd64.deb"
-          else
-            src="http://mirrors.kernel.org/ubuntu/pool/main/g/git-core/git-core_1.5.4.5-1~dapper1_i386.deb"
-          fi
-          apt-get install liberror-perl libdigest-sha1-perl
-          wget -qO /tmp/git.deb ${src}
-          dpkg -i /tmp/git.deb
-
-          if [[ "#{repository}" =~ "@" ]]; then
-            # Get host key for src machine to prevent ssh from failing
-            rm -f ~/.ssh/known_hosts
-            ! ssh -o 'StrictHostKeyChecking=no' #{repository.gsub(/:.*/, '')} &> /dev/null
-          fi
+    after "rubber:install_packages", "rubber:base:configure_git" if scm == "git"
+    task :configure_git do
+      rubber.run_script 'configure_git', <<-ENDSCRIPT
+        if [[ "#{repository}" =~ "@" ]]; then
+          # Get host key for src machine to prevent ssh from failing
+          rm -f ~/.ssh/known_hosts
+          ! ssh -o 'StrictHostKeyChecking=no' #{repository.gsub(/:.*/, '')} &> /dev/null
         fi
       ENDSCRIPT
     end
