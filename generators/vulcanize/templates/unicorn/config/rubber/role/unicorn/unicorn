@@ -1,0 +1,4 @@
+<%
+    @path = "/etc/init.d/unicorn"
+    # TODO: Write this init script
+-%>

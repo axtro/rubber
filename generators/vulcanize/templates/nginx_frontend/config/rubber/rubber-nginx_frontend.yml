@@ -1,0 +1,22 @@
+
+# Uses from base rubber config
+# domain: foo.com
+
+# Uses from rubber-complete.yml
+# web_tools_port: 8080
+
+nginx_frontend_version: 0.7.65
+
+ # you generally only need one nginx worker unless you're serving large amounts of static files which require blocking disk reads
+nginx_frontend_workers: 1
+
+# increase if you have lots of clients
+nginx_frontend_worker_connections: 1024
+
+# ~2 seconds is often enough for most folks to parse HTML/CSS and
+# retrieve needed images/icons/frames, connections are cheap in
+# nginx so increasing this is generally safe...
+nginx_frontend_keepalive_timeout: 2
+
+roles:
+  nginx_frontend:

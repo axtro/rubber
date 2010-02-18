@@ -1,0 +1,14 @@
+<%
+  @path = "/etc/logrotate.d/apache2"
+  @no_backup = true
+-%>
+/mnt/log/nginx_frontend/*.log {
+        daily
+        missingok
+        dateext
+        create 640 root root
+        sharedscripts
+        postrotate
+                [ ! -f /var/run/nginx_frontend.pid ] || kill -USR1 `cat /var/run/nginx_frontend.pid`
+        endscript
+}

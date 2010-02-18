@@ -1,0 +1,13 @@
+unicorn_version: 0.96.1
+unicorn_workers: "#{RUBBER_ENV == 'production' ? 8 : 2}"
+unicorn_worker_timeout: 30
+unicorn_base_port: 7000
+unicorn_preload_app: true
+unicorn_use_copy_on_write_if_available: true
+
+role_dependencies:
+  unicorn: [nginx_frontend]
+
+roles:
+  unicorn:
+    gems: [[unicorn, "#{unicorn_version}"]]
