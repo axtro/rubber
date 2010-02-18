@@ -1,5 +1,5 @@
 <%
-  @path = "/etc/logrotate.d/apache2"
+  @path = "/etc/logrotate.d/nginx_frontend"
   @no_backup = true
 -%>
 /mnt/log/nginx_frontend/*.log {

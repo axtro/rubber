@@ -1,0 +1,16 @@
+<%
+  @path = "/etc/logrotate.d/unicorn"
+  @no_backup = true
+
+  deploy_to = "/mnt/#{rubber_env.app_name}-#{RUBBER_ENV}"
+-%>
+<%= deploy_to %>/shared/log/unicorn*.log {
+        daily
+        missingok
+        dateext
+        create 640 <%= rubber_env.app_user %> <%= rubber_env.app_user %>
+        sharedscripts
+        postrotate
+                [ ! -f <%= deploy_to %>/shared/pids/unicorn.pid ] || kill -USR1 `cat <%= deploy_to %>/shared/pids/unicorn.pid`
+        endscript
+}
