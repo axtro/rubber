@@ -13,6 +13,7 @@ begin
     s.rubyforge_project = 'rubber'
     s.authors = ["Matt Conway"]
     s.files =  FileList["[A-Z][A-Z]*", "{bin,generators,lib,rails,recipes}/**/*"]
+    s.add_dependency 'gemcutter', '< 0.4.0' # gemcutter 0.4 needs rubygems 1.3.6, but for example nokogiri does not seem to work with 1.3.6, yet. As nettica depends on gemcutter (why??) put a direct dependency here so we get gemcutter 0.3.0
     s.add_dependency 'capistrano'
     s.add_dependency 'amazon-ec2', '>= 0.9.0'
     s.add_dependency 'aws-s3'
