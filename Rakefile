@@ -4,7 +4,7 @@ require 'rake/testtask'
 begin
   require 'jeweler'
   Jeweler::Tasks.new do |s|
-    s.name = "rubber"
+    s.name = "axtro-rubber"
     s.executables = "vulcanize"
     s.summary = "A capistrano plugin for managing multi-instance deployments to the cloud (ec2)"
     s.email = "matt@conwaysplace.com"
