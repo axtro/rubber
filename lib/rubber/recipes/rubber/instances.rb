@@ -35,7 +35,9 @@ namespace :rubber do
     # Add in roles that the given set of roles depends on
     ir = Rubber::Configuration::RoleItem.expand_role_dependencies(ir, get_role_dependencies)
 
-    create_instance(instance_alias, ir, create_spot_instance)
+    user_data = env.cloud_providers[env.cloud_provider]["user_data"]
+
+    create_instance(instance_alias, ir, create_spot_instance, user_data)
   end
 
   desc <<-DESC
@@ -156,7 +158,7 @@ namespace :rubber do
 
   # Creates a new ec2 instance with the given alias and roles
   # Configures aliases (/etc/hosts) on local and remote machines
-  def create_instance(instance_alias, instance_roles, create_spot_instance=false)
+  def create_instance(instance_alias, instance_roles, create_spot_instance=false, user_data = nil)
     fatal "Instance already exists: #{instance_alias}" if rubber_instances[instance_alias]
 
     role_names = instance_roles.collect{|x| x.name}
@@ -201,7 +203,7 @@ namespace :rubber do
 
     if !create_spot_instance || (create_spot_instance && max_wait_time < 0)
       logger.info "Creating instance #{ami}/#{ami_type}/#{security_groups.join(',') rescue 'Default'}/#{availability_zone || 'Default'}"
-      instance_id = cloud.create_instance(ami, ami_type, security_groups, availability_zone)
+      instance_id = cloud.create_instance(ami, ami_type, security_groups, availability_zone, user_data)
     end
 
     logger.info "Instance #{instance_id} created"
