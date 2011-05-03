@@ -16,7 +16,9 @@ module Rubber
       end
 
       def create_instance(ami, ami_type, security_groups, availability_zone, user_data = nil)
-        response = @ec2.run_instances(:user_data => user_data, :image_id => ami, :key_name => @aws_env.key_name, :instance_type => ami_type, :security_group => security_groups, :availability_zone => availability_zone)
+        instance_options = {:image_id => ami, :key_name => @aws_env.key_name, :instance_type => ami_type, :security_group => security_groups, :availability_zone => availability_zone}
+        instance_options[:user_data] = Base64.encode64(user_data) if user_data
+        response = @ec2.run_instances(instance_options)
         instance_id = response.instancesSet.item[0].instanceId
         return instance_id
       end
