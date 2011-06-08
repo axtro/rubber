@@ -71,8 +71,8 @@ namespace :rubber do
     detach_volume(volume_id)
   end
 
-  def create_volume(size, zone)
-    volumeId = cloud.create_volume(size.to_s, zone)
+  def create_volume(size, zone, base = nil)
+    volumeId = cloud.create_volume(size.to_s, zone, base)
     fatal "Failed to create volume" if volumeId.nil?
     return volumeId
   end
@@ -90,7 +90,7 @@ namespace :rubber do
     # first create the volume if we don't have a global record (artifacts) for it
     if ! vol_id
       logger.info "Creating volume for #{ic.full_name}:#{vol_spec['device']}"
-      vol_id = create_volume(vol_spec['size'], vol_spec['zone'])
+      vol_id = create_volume(vol_spec['size'], vol_spec['zone'], vol_spec['base'])
       artifacts['volumes'][key] = vol_id
       rubber_instances.save
       created = vol_spec['device']
@@ -131,7 +131,7 @@ namespace :rubber do
 	      fi
 		 echo "$device #{vol_spec['mount']} #{vol_spec['filesystem']} noatime 0 0 # rubber volume #{vol_id}" >> /etc/fstab		
 
-              #{('yes | mkfs -t ' + vol_spec['filesystem'] + ' ' + '$device') if created}
+              #{('yes | mkfs -t ' + vol_spec['filesystem'] + ' ' + '$device') if created && !vol_spec['base']}
               #{("mkdir -p '#{vol_spec['mount']}'") if vol_spec['mount']}
               #{("mount '#{vol_spec['mount']}'") if vol_spec['mount']}
             fi

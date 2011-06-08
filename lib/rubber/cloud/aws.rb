@@ -186,8 +186,14 @@ module Rubber
         return response.return == "true"
       end
 
-      def create_volume(size, zone)
-        response = @ec2.create_volume(:size => size.to_s, :availability_zone => zone)
+      def create_volume(size, zone, base_volume_id = nil)
+        snapshot = {}
+        # If a volume id for a base EBS volume is given, find the latest snapshot for that volume, and base the new volume on it.
+        if base_volume_id
+          base_snapshots = @ec2.describe_snapshots["snapshotSet"]["item"].select{|s|s["volumeId"] == base_volume_id}
+          snapshot = base_snapshots.sort{|a,b| b["startTime"] <=> a["startTime"]}.first
+        end
+        response = @ec2.create_volume(:size => size.to_s, :availability_zone => zone, :snapshot_id => snapshot["snapshotId"])
         return response.volumeId
       end
 
